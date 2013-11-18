@@ -9,6 +9,7 @@ import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 
 import org.bukkit.Material;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.Dispenser;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -25,6 +26,7 @@ import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.material.MaterialData;
 import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.metadata.MetadataValue;
 import org.bukkit.plugin.RegisteredServiceProvider;
@@ -55,10 +57,7 @@ public class CustomArrows extends JavaPlugin implements Listener
 			// getLogger().log(Level.INFO, "Trying: " + potionName);
 			if (getConfig().contains("customarrows." + potionName))
 			{
-				arrowTypes.put(
-						potionName,
-						new CustomArrow(potionName, new PotionImpactEffect(potionType.getEffectType(), getConfig().getInt("customarrows." + potionName + ".duration"), getConfig().getInt(
-								"customarrows." + potionName + ".amplifier")), getConfig().getInt("customarrows." + potionName + ".cost")));
+				arrowTypes.put(potionName, new CustomArrow(potionName, new PotionImpactEffect(potionType.getEffectType(), getConfig().getInt("customarrows." + potionName + ".duration"), getConfig().getInt("customarrows." + potionName + ".amplifier")), getConfig().getInt("customarrows." + potionName + ".cost")));
 				// getLogger().log(Level.INFO, "Added arrow: " + potionName);
 			}
 		}
@@ -228,14 +227,14 @@ public class CustomArrows extends JavaPlugin implements Listener
 	{
 		if (event.getItem().getItemStack().getType() == Material.ARROW)
 		{
-			//Player is going to pick up an arrow
+			// Player is going to pick up an arrow
 			List<MetadataValue> temp = event.getItem().getMetadata("cusarr");
 			if (temp != null && !temp.isEmpty())
 			{
-				//It is a custom arrow
+				// It is a custom arrow
 				for (MetadataValue v : temp)
 				{
-					if(v.value() instanceof CustomArrow)
+					if (v.value() instanceof CustomArrow)
 					{
 						CustomArrow customArrow = ((CustomArrow) v.value());
 						ItemStack result = event.getItem().getItemStack();
@@ -253,19 +252,81 @@ public class CustomArrows extends JavaPlugin implements Listener
 			}
 		}
 	}
-	
+
 	@EventHandler
 	public void onBlockDispense(BlockDispenseEvent event)
 	{
-		//event.getBlock().
-		//Dispenser dispenser = (Dispenser)event.getBlock();
-		//dispenser.
-		
+		ItemStack arrows = event.getItem();
+		//event.get
+		if (arrows.getType() == Material.ARROW)
+		{
+			// Going to dispense an arrow
+			List<String> description = arrows.getItemMeta().getLore();
+			for (String s : description)
+			{
+				if (arrowTypes.containsKey(s))
+				{
+					// The arrow is a custom arrow
+					if (event.getBlock().getState() instanceof Dispenser)
+					{
+						//The arrow is being shot with a dispenser
+						event.setCancelled(true);
+						MaterialData materialData = event.getBlock().getState().getData();
+						org.bukkit.material.Dispenser dispenserMaterial = (org.bukkit.material.Dispenser) materialData;
+						BlockFace face = dispenserMaterial.getFacing();
+
+						Arrow arrow = event.getBlock().getWorld().spawnArrow(
+								event.getBlock().getLocation().add(
+										0.5 + face.getModX(), 
+										0.5 + face.getModY(), 
+										0.5 + face.getModZ()), 
+										event.getVelocity(), 
+								0.6F, 
+								12);
+						
+						arrow.setMetadata("cusarr", new FixedMetadataValue(this, arrowTypes.get(s)));
+						//event.getItem().setAmount(event.getItem().getAmount() - 1);
+						//getLogger().log(Level.INFO, "set amount " + event.getItem().getAmount());
+						Dispenser dispenser = (Dispenser)event.getBlock().getState();
+						Inventory dispenserInventory = dispenser.getInventory();
+						ItemStack currentItem = event.getItem();
+						for (int slot = 0; slot < dispenserInventory.getSize(); slot++)
+						{
+							currentItem = dispenserInventory.getItem(slot);
+							if (currentItem != null && 
+									currentItem.getType().equals(event.getItem().getType()) && 
+									currentItem.getItemMeta().equals(event.getItem().getItemMeta()))
+							{
+								getServer().getScheduler().scheduleSyncDelayedTask(this, createRunnable(currentItem), 1);
+								/*getLogger().log(Level.INFO, "original amount" + currentItem.getAmount());
+								if(currentItem.getAmount() > 1)
+									currentItem.setAmount(currentItem.getAmount() - 1);
+								else if(currentItem.getAmount() == 1)
+									currentItem.setAmount(1);
+								else
+									currentItem.setAmount(-1);
+								getLogger().log(Level.INFO, "set amount " + currentItem.getAmount());*/
+								
+								break;
+							}
+						}
+						return;
+					}
+				}
+			}
+		}
 	}
-	
-	@EventHandler
-	public void onProjectileLaunch(ProjectileLaunchEvent event)
+
+	private Runnable createRunnable(final ItemStack itemStack)
 	{
-		//event.
+	    Runnable aRunnable = new Runnable()
+	    {
+	        public void run()
+	        {
+	            itemStack.setAmount(itemStack.getAmount() - 1);
+	        }
+	    };
+
+	    return aRunnable;
 	}
 }
