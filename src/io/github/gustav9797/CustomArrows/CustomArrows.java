@@ -1,6 +1,7 @@
 package io.github.gustav9797.CustomArrows;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.logging.Level;
 
@@ -8,6 +9,7 @@ import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 
 import org.bukkit.Material;
+import org.bukkit.block.Dispenser;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Arrow;
@@ -15,8 +17,11 @@ import org.bukkit.entity.Creature;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockDispenseEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityShootBowEvent;
+import org.bukkit.event.entity.ProjectileLaunchEvent;
+import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -25,11 +30,12 @@ import org.bukkit.metadata.MetadataValue;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
+import org.bukkit.potion.PotionType;
 
 public class CustomArrows extends JavaPlugin implements Listener
 {
 	public static Economy econ = null;
+	public static HashMap<String, CustomArrow> arrowTypes = null;
 
 	public void onEnable()
 	{
@@ -39,6 +45,22 @@ public class CustomArrows extends JavaPlugin implements Listener
 			getLogger().log(Level.SEVERE, String.format("[%s] - Disabled due to no Vault dependency found!", getDescription().getName()));
 			getServer().getPluginManager().disablePlugin(this);
 			return;
+		}
+
+		// Initialize all types of arrows
+		arrowTypes = new HashMap<String, CustomArrow>();
+		for (PotionType potionType : PotionType.values())
+		{
+			String potionName = potionType.name().toLowerCase();
+			// getLogger().log(Level.INFO, "Trying: " + potionName);
+			if (getConfig().contains("customarrows." + potionName))
+			{
+				arrowTypes.put(
+						potionName,
+						new CustomArrow(potionName, new PotionImpactEffect(potionType.getEffectType(), getConfig().getInt("customarrows." + potionName + ".duration"), getConfig().getInt(
+								"customarrows." + potionName + ".amplifier")), getConfig().getInt("customarrows." + potionName + ".cost")));
+				// getLogger().log(Level.INFO, "Added arrow: " + potionName);
+			}
 		}
 	}
 
@@ -64,37 +86,57 @@ public class CustomArrows extends JavaPlugin implements Listener
 
 	public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args)
 	{
-		if (cmd.getName().equalsIgnoreCase("poisonarrows"))
+		if (cmd.getName().equalsIgnoreCase("buyarrows") && args.length >= 1)
 		{
 			if (sender instanceof Player)
 			{
 				Player player = (Player) sender;
-				if (player.hasPermission("customarrows.poison"))
+				if (arrowTypes.containsKey(args[0]))
 				{
-					if (econ.has(player.getName(), 400))
+					if (player.hasPermission("customarrows." + args[0]))
 					{
-						EconomyResponse response = econ.withdrawPlayer(player.getName(), 400);
-						if (response.transactionSuccess())
+						// Get the amount of arrows the player wants to buy
+						int amount = 1;
+						try
 						{
-							ItemStack arrows = new ItemStack(Material.ARROW, 64);
-							ItemMeta temp = arrows.getItemMeta();
-							ArrayList<String> description = new ArrayList<String>()
+							if (args.length > 1)
+								amount = Integer.parseInt(args[1]);
+						}
+						catch (NumberFormatException e)
+						{
+							amount = 1;
+						}
+
+						int totalCost = amount * arrowTypes.get(args[0]).cost;
+
+						if (econ.has(player.getName(), totalCost))
+						{
+							EconomyResponse response = econ.withdrawPlayer(player.getName(), totalCost);
+							if (response.transactionSuccess())
 							{
-								{
-									add("Poison arrow");
-								}
-							};
-							temp.setLore(description);
-							arrows.setItemMeta(temp);
-							player.getInventory().addItem(arrows);
-							player.sendMessage("You bought 1 stack of poison arrows.");
+								ItemStack arrows = new ItemStack(Material.ARROW, amount);
+								ItemMeta temp = arrows.getItemMeta();
+								List<String> description = new ArrayList<String>();
+								description.add(args[0]);
+								temp.setLore(description);
+								arrows.setItemMeta(temp);
+								player.getInventory().addItem(arrows);
+								if (amount >= 1)
+									player.sendMessage("You bought " + amount + " " + args[0] + " arrow.");
+								else
+									player.sendMessage("You bought " + amount + " " + args[0] + " arrows.");
+							}
+							else
+								player.sendMessage("Failed to buy arrows. " + response.errorMessage);
 						}
 						else
-							player.sendMessage("Failed to buy arrows. " + response.errorMessage);
+							player.sendMessage("Failed to buy arrows. You need atleast $" + totalCost);
 					}
 					else
-						player.sendMessage("Failed to buy arrows. You need atleast $400");
+						player.sendMessage("You don't have permission to buy that arrow.");
 				}
+				else
+					player.sendMessage("That arrow type does not exist.");
 			}
 			return true;
 		}
@@ -104,8 +146,10 @@ public class CustomArrows extends JavaPlugin implements Listener
 	@EventHandler
 	public void onEntityShootBow(EntityShootBowEvent event)
 	{
+		// getLogger().log(Level.INFO, "11");
 		if (event.getEntity() instanceof Player)
 		{
+			// getLogger().log(Level.INFO, "22");
 			// Now check if the arrow that will be used is a poison arrow
 			Player player = (Player) event.getEntity();
 			Inventory inventory = player.getInventory();
@@ -115,15 +159,20 @@ public class CustomArrows extends JavaPlugin implements Listener
 				ItemStack current = inventory.getItem(i);
 				if (current != null && current.getType() == Material.ARROW)
 				{
+					// getLogger().log(Level.INFO, "33");
 					if (current.getItemMeta().getLore() != null && !current.getItemMeta().getLore().isEmpty())
 					{
-						if (current.getItemMeta().getLore().get(0).equalsIgnoreCase("Poison arrow"))
+						String arrowType = current.getItemMeta().getLore().get(0);
+						// getLogger().log(Level.INFO, "44 " + arrowType);
+						if (arrowTypes.containsKey(arrowType))
 						{
-							// Player is going to shoot a poison arrow
+							// getLogger().log(Level.INFO, "55");
+							// Player is going to shoot a custom arrow
 							if (event.getProjectile() instanceof Arrow)
 							{
+								// getLogger().log(Level.INFO, "66");
 								Arrow projectile = (Arrow) event.getProjectile();
-								projectile.setMetadata("parrow", new FixedMetadataValue(this, true));
+								projectile.setMetadata("cusarr", new FixedMetadataValue(this, arrowTypes.get(arrowType)));
 								return;
 							}
 						}
@@ -138,29 +187,85 @@ public class CustomArrows extends JavaPlugin implements Listener
 	@EventHandler
 	public void onEntityDamageByEntity(EntityDamageByEntityEvent event)
 	{
+		// getLogger().log(Level.INFO, "1");
 		if (event.getDamager() instanceof Arrow)
 		{
+			// getLogger().log(Level.INFO, "2");
 			Arrow damager = (Arrow) event.getDamager();
-			List<MetadataValue> temp = damager.getMetadata("parrow");
+			List<MetadataValue> temp = damager.getMetadata("cusarr");
 			if (!temp.isEmpty())
 			{
-				MetadataValue isPoisonArrow = temp.get(0);
-				if (isPoisonArrow.asBoolean())
+				// getLogger().log(Level.INFO, "3");
+				MetadataValue isArrow = temp.get(0);
+				if (isArrow.value() instanceof CustomArrow)
 				{
+					// getLogger().log(Level.INFO, "4");
+					CustomArrow arrow = (CustomArrow) isArrow.value();
+					PotionImpactEffect potionImpactEffect = ((PotionImpactEffect) arrow.impactEffect);
+					if (potionImpactEffect == null)
+						return;
+					PotionEffect potionEffect = new PotionEffect(potionImpactEffect.type, arrow.impactEffect.duration, potionImpactEffect.amplifier);
+
 					if (event.getEntity() instanceof Creature)
 					{
+						// getLogger().log(Level.INFO, "5");
 						Creature damaged = (Creature) event.getEntity();
-						PotionEffect potionEffect = new PotionEffect(PotionEffectType.POISON, 3580, -2);
 						damaged.addPotionEffect(potionEffect);
 					}
 					else if (event.getEntity() instanceof Player)
 					{
+						// getLogger().log(Level.INFO, "5");
 						Player damaged = (Player) event.getEntity();
-						PotionEffect potionEffect = new PotionEffect(PotionEffectType.POISON, 3580, -2);
 						damaged.addPotionEffect(potionEffect);
 					}
 				}
 			}
 		}
+	}
+
+	@EventHandler
+	public void onPlayerPickupItem(PlayerPickupItemEvent event)
+	{
+		if (event.getItem().getItemStack().getType() == Material.ARROW)
+		{
+			//Player is going to pick up an arrow
+			List<MetadataValue> temp = event.getItem().getMetadata("cusarr");
+			if (temp != null && !temp.isEmpty())
+			{
+				//It is a custom arrow
+				for (MetadataValue v : temp)
+				{
+					if(v.value() instanceof CustomArrow)
+					{
+						CustomArrow customArrow = ((CustomArrow) v.value());
+						ItemStack result = event.getItem().getItemStack();
+						ItemMeta itemMeta = result.getItemMeta();
+						List<String> lore = new ArrayList<String>();
+						lore.add(customArrow.getType());
+						itemMeta.setLore(lore);
+						result.setItemMeta(itemMeta);
+						event.getPlayer().getInventory().addItem(result);
+						event.getItem().remove();
+						event.setCancelled(true);
+						return;
+					}
+				}
+			}
+		}
+	}
+	
+	@EventHandler
+	public void onBlockDispense(BlockDispenseEvent event)
+	{
+		//event.getBlock().
+		//Dispenser dispenser = (Dispenser)event.getBlock();
+		//dispenser.
+		
+	}
+	
+	@EventHandler
+	public void onProjectileLaunch(ProjectileLaunchEvent event)
+	{
+		//event.
 	}
 }

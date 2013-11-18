@@ -2,8 +2,8 @@ name: CustomArrows
 main: io.github.gustav9797.CustomArrows.CustomArrows
 version: 0.1
 commands:
-   poisonarrows:
-      description: Gives you a stack of poison arrows.
-      usage: /poisonarrows
-      permission: customarrows.poison
-      permission-message: You don't have customarrows.poison
+   buyarrows:
+      description: Buys custom arrows.
+      usage: /buyarrows <type> <amount>
+      permission: customarrows.buyarrows
+      permission-message: You don't have customarrows.buyarrows

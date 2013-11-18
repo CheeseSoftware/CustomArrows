@@ -1,0 +1,51 @@
+# default config.yml
+#
+customarrows:
+    water:            # Type of the potion effect
+        duration: 600 # Duration in ticks
+        amplifier: 0  # Modifier of the effect of the arrow
+        cost: 40      # How much each arrow costs in your currency(Must be using Vault!)
+    regen:
+        duration: 600
+        amplifier: 0
+        cost: 40
+    speed:
+        duration: 600
+        amplifier: 0
+        cost: 40
+    fire_resistance:
+        duration: 600
+        amplifier: 0
+        cost: 40
+    poison:
+        duration: 600
+        amplifier: 0
+        cost: 40
+    instant_heal:
+        duration: 600
+        amplifier: 0
+        cost: 40
+    night_vision:
+        duration: 600
+        amplifier: 0
+        cost: 40
+    weakness:
+        duration: 600
+        amplifier: 0
+        cost: 40
+    strength:
+        duration: 600
+        amplifier: 0
+        cost: 40
+    slowness:
+        duration: 600
+        amplifier: 0
+        cost: 40
+    instant_damage:
+        duration: 600
+        amplifier: 0
+        cost: 40
+    invisibility:
+        duration: 600
+        amplifier: 0
+        cost: 40
